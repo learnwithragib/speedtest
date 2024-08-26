@@ -1,11 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 
 const testServers = [
-  'https://speed1.example.com',
-  'https://speed2.example.com',
-  'https://speed3.example.com',
-  'https://speed4.example.com',
-  'https://speed5.example.com',
+ 'https://speed.hetzner.de/100MB.bin',
+  'https://proof.ovh.net/files/100Mb.dat',
+  'https://files.jkdesign.xyz/100mb.zip',
+  'https://sanog.org/resources/100MB.test',
+  'https://bms24bg.com/download/100MB.bin',
 ];
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
