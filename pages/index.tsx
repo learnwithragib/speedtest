@@ -1,74 +1,79 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import styles from '../styles/Home.module.css';
 
+const TEST_DURATION = 10000; // 10 seconds
+const UPDATE_INTERVAL = 100; // 100ms
+
 export default function Home() {
-  const [downloadSpeed, setDownloadSpeed] = useState<number | null>(null);
-  const [uploadSpeed, setUploadSpeed] = useState<number | null>(null);
+  const [speed, setSpeed] = useState<number | null>(null);
   const [testing, setTesting] = useState(false);
+  const [progress, setProgress] = useState(0);
 
-  const testFileUrl = '/api/testfile';
-  const fileSize = 1 * 1024 * 1024; // 1 MB test file size
-  const testData = 'X'.repeat(1024 * 1024); // 1 MB of data for upload test
-
-  async function measureDownloadSpeed(): Promise<number> {
-    const startTime = Date.now();
-    
-    try {
-      await axios.get(testFileUrl, { responseType: 'arraybuffer' });
-      const endTime = Date.now();
-      const durationInSeconds = (endTime - startTime) / 1000;
-      const speedMbps = (fileSize / durationInSeconds / 1024 / 1024) * 8;
-      
-      return parseFloat(speedMbps.toFixed(2));
-    } catch (error) {
-      console.error('Error measuring download speed:', error);
-      return 0;
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (testing) {
+      interval = setInterval(() => {
+        setProgress((prev) => Math.min(prev + (UPDATE_INTERVAL / TEST_DURATION) * 100, 100));
+      }, UPDATE_INTERVAL);
     }
-  }
-
-  async function measureUploadSpeed(): Promise<number> {
-    const startTime = Date.now();
-    
-    try {
-      await axios.post(testFileUrl, testData);
-      const endTime = Date.now();
-      const durationInSeconds = (endTime - startTime) / 1000;
-      const speedMbps = (testData.length / durationInSeconds / 1024 / 1024) * 8;
-      
-      return parseFloat(speedMbps.toFixed(2));
-    } catch (error) {
-      console.error('Error measuring upload speed:', error);
-      return 0;
-    }
-  }
+    return () => clearInterval(interval);
+  }, [testing]);
 
   async function runTest() {
     setTesting(true);
-    setDownloadSpeed(null);
-    setUploadSpeed(null);
+    setSpeed(null);
+    setProgress(0);
 
-    const downloadSpeed = await measureDownloadSpeed();
-    setDownloadSpeed(downloadSpeed);
+    const servers = await axios.get('/api/servers');
+    const testServers = servers.data.slice(0, 3); // Use top 3 servers
 
-    const uploadSpeed = await measureUploadSpeed();
-    setUploadSpeed(uploadSpeed);
+    let totalBytes = 0;
+    const startTime = Date.now();
 
+    while (Date.now() - startTime < TEST_DURATION) {
+      await Promise.all(testServers.map(async (server: string) => {
+        try {
+          const response = await axios.get(`${server}/testfile`, { responseType: 'arraybuffer' });
+          totalBytes += response.data.byteLength;
+        } catch (error) {
+          console.error('Error during speed test:', error);
+        }
+      }));
+    }
+
+    const endTime = Date.now();
+    const durationInSeconds = (endTime - startTime) / 1000;
+    const speedMbps = (totalBytes * 8) / (durationInSeconds * 1000000);
+
+    setSpeed(parseFloat(speedMbps.toFixed(2)));
     setTesting(false);
+    setProgress(100);
   }
 
   return (
     <div className={styles.container}>
       <h1 className={styles.title}>Network Speed Test</h1>
-      <button onClick={runTest} disabled={testing} className={styles.button}>
-        {testing ? 'Testing...' : 'Start Test'}
-      </button>
-      {downloadSpeed !== null && (
-        <p className={styles.result}>Download speed: {downloadSpeed} Mbps</p>
+      {!testing && speed === null && (
+        <button onClick={runTest} className={styles.button}>
+          START
+        </button>
       )}
-      {uploadSpeed !== null && (
-        <p className={styles.result}>Upload speed: {uploadSpeed} Mbps</p>
+      {testing && (
+        <div className={styles.testing}>
+          <div className={styles.spinner}></div>
+          <p>Testing...</p>
+        </div>
       )}
+      {speed !== null && (
+        <div className={styles.result}>
+          <span className={styles.speed}>{speed}</span>
+          <span className={styles.unit}>Mbps</span>
+        </div>
+      )}
+      <div className={styles.progressBar}>
+        <div className={styles.progressFill} style={{ width: `${progress}%` }}></div>
+      </div>
     </div>
   );
 }
